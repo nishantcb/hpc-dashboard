@@ -1,0 +1,14 @@
+[
+  {
+    "name": "server250",
+    "host": "192.168.3.250",
+    "port": 22,
+    "username": "nishant"
+  },
+  {
+    "name": "server1",
+    "host": "192.168.24.88",
+    "port": 22,
+    "username": "nishant"
+  }
+]

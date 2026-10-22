@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluster Watch</title>
+<style>
+  :root{
+    --bg:#0A0D13;
+    --panel:rgba(17,21,31,0.68);
+    --panel-border:rgba(255,255,255,0.08);
+    --text:#E9EEF7;
+    --muted:#7C8698;
+    --cyan:#22D3EE;
+    --violet:#8B5CF6;
+    --magenta:#EC4899;
+    --amber:#F5A524;
+    --red:#F5455C;
+    --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    min-height:100vh;
+    color:var(--text);
+    font-family:var(--sans);
+    padding:2.5rem 1.5rem 4rem;
+    background:
+      radial-gradient(1100px circle at 12% -8%, rgba(139,92,246,0.16), transparent 42%),
+      radial-gradient(1000px circle at 100% 0%, rgba(34,211,238,0.10), transparent 46%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 34px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 34px),
+      var(--bg);
+    background-attachment:fixed;
+  }
+  a{color:var(--cyan);}
+  .wrap{max-width:1220px;margin:0 auto;}
+
+  .page-head h1{
+    font-size:2rem;font-weight:700;margin:0 0 .3rem;letter-spacing:-0.01em;
+    background:linear-gradient(90deg, var(--cyan), var(--violet) 55%, var(--magenta));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    display:inline-block;
+  }
+  .page-head .sub{color:var(--muted);margin:0 0 1.75rem;max-width:56ch;}
+
+  .add-server{
+    background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--panel-border);border-radius:12px;padding:1.1rem 1.2rem;margin-bottom:2rem;
+  }
+  .add-server form{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;}
+  input{
+    background:rgba(6,8,13,0.7);border:1px solid var(--panel-border);color:var(--text);
+    border-radius:7px;padding:.55rem .7rem;font-size:.9rem;font-family:var(--sans);
+  }
+  input::placeholder{color:#5B6478;}
+  input:focus-visible, button:focus-visible, th:focus-visible{outline:2px solid var(--cyan);outline-offset:2px;}
+  input[name="name"]{flex:1 1 180px;}
+  input[name="host"]{flex:1 1 160px;}
+  input[name="username"]{flex:1 1 140px;}
+
+  button{
+    cursor:pointer;border:1px solid var(--panel-border);background:rgba(255,255,255,0.04);
+    color:var(--text);border-radius:7px;padding:.55rem .95rem;font-size:.9rem;font-family:var(--sans);
+    transition:background .15s ease, box-shadow .15s ease, filter .15s ease;
+  }
+  button:hover{background:rgba(255,255,255,0.08);}
+  button.ghost{background:transparent;}
+  button.ghost.small{padding:.35rem .7rem;font-size:.8rem;color:var(--muted);}
+  button.ghost.small:hover{color:var(--text);}
+  button.primary{
+    background:linear-gradient(90deg, var(--cyan), var(--violet));
+    color:#08090D;border:none;font-weight:700;
+  }
+  button.primary:hover{filter:brightness(1.08);box-shadow:0 0 22px rgba(34,211,238,.3);}
+
+  .panels{display:grid;grid-template-columns:repeat(auto-fill, minmax(380px, 1fr));gap:1.15rem;}
+  .empty{color:var(--muted);border:1px dashed var(--panel-border);border-radius:12px;padding:2.2rem;text-align:center;}
+
+  .panel{
+    position:relative;overflow:hidden;
+    background:var(--panel);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--panel-border);border-radius:14px;
+    padding:1.2rem 1.25rem 1.4rem;display:flex;flex-direction:column;gap:1rem;
+  }
+  .panel::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg, var(--cyan), var(--violet), var(--magenta));opacity:.5;
+  }
+
+  .panel-head{display:flex;align-items:center;gap:.65rem;}
+  .dot{width:.6rem;height:.6rem;border-radius:50%;background:#3E4658;flex:0 0 auto;}
+  .dot.ok{background:var(--cyan);animation:pulse 2.2s ease-in-out infinite;}
+  .dot.err{background:var(--red);box-shadow:0 0 10px rgba(245,69,92,.7);}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,211,238,.55);}70%{box-shadow:0 0 0 9px rgba(34,211,238,0);}100%{box-shadow:0 0 0 0 rgba(34,211,238,0);}}
+  @media (prefers-reduced-motion: reduce){ .dot.ok{animation:none;} }
+
+  .panel-titles{flex:1;min-width:0;}
+  .panel-titles h2{font-size:1rem;font-weight:600;margin:0;}
+  .panel-titles .host{margin:.1rem 0 0;color:var(--muted);font-family:var(--mono);font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  .error{color:var(--amber);font-size:.85rem;margin:0 0 .5rem;}
+  .error:empty{display:none;}
+  .connect-form{display:flex;flex-wrap:wrap;gap:.5rem;}
+  .connect-form input{flex:1 1 110px;}
+
+  /* -- gauges ------------------------------------------------------- */
+  .gauge-row{display:flex;gap:1.1rem;align-items:center;}
+  .ring-box{display:flex;flex-direction:column;align-items:center;gap:.35rem;}
+  .ring{width:96px;height:96px;}
+  .ring-track{fill:none;stroke:rgba(255,255,255,0.07);stroke-width:9;}
+  .ring-fill{fill:none;stroke-width:9;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .6s ease;}
+  .ring-fill.cpu{stroke:url(#gradCpu);filter:drop-shadow(0 0 6px rgba(34,211,238,.55));}
+  .ring-fill.mem{stroke:url(#gradMem);filter:drop-shadow(0 0 6px rgba(139,92,246,.5));}
+  .ring-text{fill:var(--text);font-family:var(--mono);font-size:18px;font-weight:600;}
+  .ring-label{font-size:.72rem;color:var(--muted);letter-spacing:.02em;}
+
+  .side-stats{flex:1;display:flex;flex-direction:column;gap:.5rem;min-width:0;}
+  .stat-line{display:flex;justify-content:space-between;font-size:.78rem;color:var(--muted);}
+  .stat-line .mono{color:var(--text);}
+
+  /* -- per-core heat grid --------------------------------------------- */
+  .core-label{font-size:.72rem;color:var(--muted);margin:0 0 .35rem;}
+  .core-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(7px, 1fr));grid-auto-rows:20px;gap:3px;max-height:64px;overflow-y:auto;}
+  .core-bar{position:relative;border-radius:2px;background:rgba(255,255,255,0.06);overflow:hidden;}
+  .core-fill{position:absolute;left:0;right:0;bottom:0;border-radius:2px;transition:height .5s ease, background .5s ease;}
+
+  /* -- sparkline -------------------------------------------------------- */
+  .spark-wrap{height:38px;}
+  .spark{width:100%;height:100%;overflow:visible;}
+  .spark-line{fill:none;stroke:url(#gradCpu);stroke-width:1.6;filter:drop-shadow(0 0 3px rgba(34,211,238,.6));}
+  .spark-area{fill:url(#gradSparkArea);stroke:none;}
+
+  /* -- users table ------------------------------------------------------ */
+  table.users-table{width:100%;border-collapse:collapse;font-size:.8rem;}
+  .users-table th{text-align:left;color:var(--muted);font-weight:500;padding:.35rem .4rem;border-bottom:1px solid var(--panel-border);cursor:pointer;user-select:none;font-family:var(--mono);}
+  .users-table th:hover{color:var(--text);}
+  .users-table td{padding:.35rem .4rem;border-bottom:1px solid rgba(255,255,255,0.05);position:relative;}
+  .users-table td.mono{font-family:var(--mono);}
+  .metric-cell .bar-fill{position:absolute;left:2px;top:3px;bottom:3px;border-radius:3px;background:linear-gradient(90deg,var(--cyan),var(--violet));opacity:.28;z-index:0;}
+  .metric-cell .val{position:relative;z-index:1;}
+  .muted{color:var(--muted);}
+  .mono{font-family:var(--mono);}
+  .panel:not(.has-gpu) .gpu-col{display:none;}
+
+  /* -- disk usage --------------------------------------------------- */
+  .disk-section{display:flex;flex-direction:column;gap:.6rem;}
+  .disk-wrap{display:flex;flex-direction:column;gap:.65rem;}
+  .disk-error{color:var(--amber);font-size:.8rem;margin:0;}
+  .disk-error:empty{display:none;}
+  .disk-row{display:flex;flex-direction:column;gap:.28rem;}
+  .disk-row-head{display:flex;justify-content:space-between;font-size:.78rem;}
+  .disk-mount{color:var(--text);font-family:var(--mono);}
+  .disk-pct{color:var(--muted);font-family:var(--mono);}
+  .disk-track{height:.4rem;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;}
+  .disk-fill{height:100%;border-radius:999px;transition:width .5s ease, background .5s ease;}
+  .disk-meta{font-size:.72rem;color:var(--muted);font-family:var(--mono);}
+
+  [hidden]{display:none !important;}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gradCpu" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="gradMem" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <linearGradient id="gradSparkArea" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="page-head">
+    <h1>Cluster Watch</h1>
+    <p class="sub">Live CPU, memory and per-user usage across your servers, pulled over your own SSH login.</p>
+  </header>
+
+  <section class="add-server">
+    <form id="add-form">
+      <input name="name" placeholder="Label, e.g. hpc-login1" required>
+      <input name="host" placeholder="Host or IP" required>
+      <input name="port" placeholder="Port" value="22" style="width:4.5rem">
+      <input name="username" placeholder="Username" required>
+      <button type="submit" class="primary">Add server</button>
+    </form>
+  </section>
+
+  <main id="panels" class="panels"></main>
+  <p id="empty-state" class="empty">No servers yet — add one above to start watching it.</p>
+</div>
+
+<template id="panel-template">
+  <article class="panel">
+    <header class="panel-head">
+      <span class="dot idle" data-el="dot"></span>
+      <div class="panel-titles">
+        <h2 data-el="name"></h2>
+        <p class="host" data-el="host"></p>
+      </div>
+      <button class="ghost small" data-el="remove">Remove</button>
+    </header>
+
+    <div class="connect-wrap" data-el="connectWrap">
+      <p class="error" data-el="error"></p>
+      <form class="connect-form" data-el="connectForm">
+        <input type="password" name="password" placeholder="Password" required>
+        <input type="text" name="otp" placeholder="OTP / code, if asked" autocomplete="one-time-code">
+        <button type="submit" class="primary">Connect</button>
+      </form>
+    </div>
+
+    <div class="stats-wrap" data-el="statsWrap" hidden>
+      <div class="gauge-row">
+        <div class="ring-box">
+          <svg class="ring" viewBox="0 0 100 100">
+            <circle class="ring-track" cx="50" cy="50" r="42"/>
+            <circle class="ring-fill cpu" data-el="cpuRing" cx="50" cy="50" r="42"/>
+            <text class="ring-text" data-el="cpuRingText" x="50" y="56" text-anchor="middle">0%</text>
+          </svg>
+          <span class="ring-label">CPU</span>
+        </div>
+        <div class="ring-box">
+          <svg class="ring" viewBox="0 0 100 100">
+            <circle class="ring-track" cx="50" cy="50" r="42"/>
+            <circle class="ring-fill mem" data-el="memRing" cx="50" cy="50" r="42"/>
+            <text class="ring-text" data-el="memRingText" x="50" y="56" text-anchor="middle">0%</text>
+          </svg>
+          <span class="ring-label">Memory</span>
+        </div>
+        <div class="side-stats">
+          <div class="stat-line"><span>Cores</span><span class="mono" data-el="coresNote"></span></div>
+          <div class="stat-line"><span>RAM used</span><span class="mono" data-el="memText"></span></div>
+        </div>
+      </div>
+
+      <div>
+        <p class="core-label">Per-core load</p>
+        <div class="core-grid" data-el="coreGrid"></div>
+      </div>
+
+      <div class="gpu-section" data-el="gpuSection" hidden>
+        <p class="core-label">GPU</p>
+        <div class="disk-list" data-el="gpuList"></div>
+      </div>
+
+      <div class="spark-wrap">
+        <svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none">
+          <polygon class="spark-area" data-el="sparkArea" points=""/>
+          <polyline class="spark-line" data-el="sparkLine" points=""/>
+        </svg>
+      </div>
+
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th data-sort="user" tabindex="0">User</th>
+            <th data-sort="cpu_pct" tabindex="0">CPU %</th>
+            <th data-sort="mem_pct" tabindex="0">Mem %</th>
+            <th data-sort="rss_mb" tabindex="0">RAM</th>
+            <th data-sort="gpu_mb" tabindex="0" class="gpu-col">GPU</th>
+            <th data-sort="max_etimes" tabindex="0">Running for</th>
+          </tr>
+        </thead>
+        <tbody data-el="usersBody"></tbody>
+      </table>
+
+      <div class="disk-section">
+        <button class="ghost small" data-el="diskToggle">Disk usage</button>
+        <div class="disk-wrap" data-el="diskWrap" hidden>
+          <p class="disk-error" data-el="diskError"></p>
+          <div class="disk-list" data-el="diskList"></div>
+        </div>
+      </div>
+
+      <button class="ghost small" data-el="disconnect">Disconnect</button>
+    </div>
+  </article>
+</template>
+
+<script>
+const panelsEl = document.getElementById('panels');
+const emptyState = document.getElementById('empty-state');
+const template = document.getElementById('panel-template');
+const addForm = document.getElementById('add-form');
+const panels = new Map(); // name -> { root, e, connected, sortKey, sortDir, lastUsers, history[] }
+
+const RING_R = 42;
+const RING_C = 2 * Math.PI * RING_R;
+const HISTORY_LEN = 40;
+
+function els(root){
+  const map = {};
+  root.querySelectorAll('[data-el]').forEach(el => map[el.dataset.el] = el);
+  return map;
+}
+
+function fmtMB(mb){
+  if (mb >= 1024*1024) return (mb/1024/1024).toFixed(2) + ' TB';
+  if (mb >= 1024) return (mb/1024).toFixed(1) + ' GB';
+  return Math.round(mb) + ' MB';
+}
+function fmtDuration(s){
+  s = Math.max(0, Math.floor(s));
+  const d = Math.floor(s/86400); s -= d*86400;
+  const h = Math.floor(s/3600); s -= h*3600;
+  const m = Math.floor(s/60);
+  if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm';
+}
+
+function hexToRgb(hex){
+  const v = parseInt(hex.slice(1), 16);
+  return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 };
+}
+function lerpColor(a, b, t){
+  const pa = hexToRgb(a), pb = hexToRgb(b);
+  const r = Math.round(pa.r + (pb.r-pa.r)*t);
+  const g = Math.round(pa.g + (pb.g-pa.g)*t);
+  const bl = Math.round(pa.b + (pb.b-pa.b)*t);
+  return `rgb(${r},${g},${bl})`;
+}
+function coreColor(pct){
+  if (pct <= 50) return lerpColor('#22D3EE', '#F5A524', pct/50);
+  return lerpColor('#F5A524', '#EC4899', Math.min(1, (pct-50)/50));
+}
+
+function setRing(circle, textEl, pct){
+  const clamped = Math.max(0, Math.min(100, pct));
+  const offset = RING_C * (1 - clamped/100);
+  circle.style.strokeDasharray = RING_C;
+  circle.style.strokeDashoffset = offset;
+  textEl.textContent = clamped.toFixed(0) + '%';
+}
+
+function createPanel(server){
+  const frag = template.content.cloneNode(true);
+  const root = frag.querySelector('.panel');
+  const e = els(root);
+  e.name.textContent = server.name;
+  e.host.textContent = `${server.username}@${server.host}:${server.port}`;
+  e.remove.addEventListener('click', () => removeServer(server.name));
+  e.connectForm.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(e.connectForm);
+    connectServer(server.name, fd.get('password'), fd.get('otp') || '');
+  });
+  e.disconnect.addEventListener('click', () => disconnectServer(server.name));
+  e.diskToggle.addEventListener('click', () => toggleDisk(server.name));
+  root.querySelectorAll('[data-sort]').forEach(th => {
+    const activate = () => {
+      const key = th.dataset.sort;
+      const state = panels.get(server.name);
+      if (state.sortKey === key) state.sortDir *= -1;
+      else { state.sortKey = key; state.sortDir = key === 'user' ? 1 : -1; }
+      renderUsers(server.name);
+    };
+    th.addEventListener('click', activate);
+    th.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); activate(); } });
+  });
+  panelsEl.appendChild(root);
+  panels.set(server.name, { root, e, connected: false, sortKey: 'cpu_pct', sortDir: -1, lastUsers: [], history: [] });
+  emptyState.hidden = true;
+}
+
+function pruneMissingPanels(currentNames){
+  for (const name of Array.from(panels.keys())){
+    if (!currentNames.has(name)){
+      panels.get(name).root.remove();
+      panels.delete(name);
+    }
+  }
+  emptyState.hidden = panels.size > 0;
+}
+
+async function loadServers(){
+  const res = await fetch('/api/servers');
+  const list = await res.json();
+  const names = new Set(list.map(s => s.name));
+  for (const s of list) if (!panels.has(s.name)) createPanel(s);
+  pruneMissingPanels(names);
+  for (const s of list) setConnectedState(s.name, s.connected, s.error);
+}
+
+function setConnectedState(name, connected, error){
+  const state = panels.get(name);
+  if (!state) return;
+  state.connected = connected;
+  state.e.statsWrap.hidden = !connected;
+  state.e.connectWrap.hidden = connected;
+  state.e.dot.className = 'dot ' + (connected ? 'ok' : (error ? 'err' : 'idle'));
+  state.e.error.textContent = connected ? '' : (error || '');
+  if (!connected) {
+    state.history = [];
+    state.e.diskWrap.hidden = true;
+    state.e.diskToggle.textContent = 'Disk usage';
+    state.e.diskList.innerHTML = '';
+    state.e.diskError.textContent = '';
+    state.e.gpuSection.hidden = true;
+    state.root.classList.remove('has-gpu');
+  }
+}
+
+function renderUsers(name){
+  const state = panels.get(name);
+  if (!state) return;
+  const rows = [...state.lastUsers].sort((a, b) => {
+    const k = state.sortKey;
+    if (k === 'user') return a.user.localeCompare(b.user) * state.sortDir;
+    return (a[k] - b[k]) * state.sortDir;
+  });
+  const maxCpu = Math.max(1, ...rows.map(u => u.cpu_pct));
+  state.e.usersBody.innerHTML = rows.map(u => `
+    <tr>
+      <td>${u.user}</td>
+      <td class="mono metric-cell"><span class="bar-fill" style="width:${Math.min(100, u.cpu_pct/maxCpu*100)}%"></span><span class="val">${u.cpu_pct.toFixed(1)}</span></td>
+      <td class="mono">${u.mem_pct.toFixed(1)}</td>
+      <td class="mono">${fmtMB(u.rss_mb)}</td>
+      <td class="mono gpu-col">${u.gpu_mb ? fmtMB(u.gpu_mb) : '—'}</td>
+      <td class="mono">${fmtDuration(u.max_etimes)}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="muted">No processes reported</td></tr>';
+}
+
+function renderGpus(state, gpus){
+  const has = gpus && gpus.length > 0;
+  state.e.gpuSection.hidden = !has;
+  state.root.classList.toggle('has-gpu', has);
+  if (!has) return;
+  state.e.gpuList.innerHTML = gpus.map(g => `
+    <div class="disk-row">
+      <div class="disk-row-head">
+        <span class="disk-mount">${g.name} <span class="muted">#${g.index}</span></span>
+        <span class="disk-pct">${g.util_pct.toFixed(0)}%</span>
+      </div>
+      <div class="disk-track"><div class="disk-fill" style="width:${Math.min(100, g.util_pct)}%; background:${coreColor(g.util_pct)}"></div></div>
+      <div class="disk-meta">${fmtMB(g.mem_used_mb)} VRAM used of ${fmtMB(g.mem_total_mb)} · ${g.temp_c.toFixed(0)}°C</div>
+    </div>`).join('');
+}
+
+function renderCores(state, perCore){
+  state.e.coreGrid.innerHTML = perCore.map((pct, i) => `
+    <div class="core-bar" title="core ${i}: ${pct.toFixed(0)}%">
+      <div class="core-fill" style="height:${Math.max(4, pct)}%; background:${coreColor(pct)}"></div>
+    </div>`).join('');
+}
+
+async function toggleDisk(name){
+  const state = panels.get(name);
+  if (!state) return;
+  const wrap = state.e.diskWrap;
+  if (!wrap.hidden){
+    wrap.hidden = true;
+    state.e.diskToggle.textContent = 'Disk usage';
+    return;
+  }
+  wrap.hidden = false;
+  state.e.diskToggle.textContent = 'Hide disk usage';
+  state.e.diskError.textContent = 'Reading disk usage…';
+  state.e.diskList.innerHTML = '';
+  try {
+    const res = await fetch(`/api/servers/${encodeURIComponent(name)}/disk`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok){
+      state.e.diskError.textContent = data.error || 'Could not read disk usage';
+      return;
+    }
+    state.e.diskError.textContent = '';
+    renderDisks(state, data.disks || []);
+  } catch (err) {
+    state.e.diskError.textContent = 'Could not reach the server';
+  }
+}
+
+function renderDisks(state, disks){
+  if (!disks.length){
+    state.e.diskList.innerHTML = '<p class="muted">No filesystems reported.</p>';
+    return;
+  }
+  state.e.diskList.innerHTML = disks.map(d => `
+    <div class="disk-row">
+      <div class="disk-row-head">
+        <span class="disk-mount">${d.mount}</span>
+        <span class="disk-pct">${d.pct.toFixed(0)}%</span>
+      </div>
+      <div class="disk-track"><div class="disk-fill" style="width:${Math.min(100, d.pct)}%; background:${coreColor(d.pct)}"></div></div>
+      <div class="disk-meta">${fmtMB(d.used_mb)} used · ${fmtMB(d.avail_mb)} free of ${fmtMB(d.total_mb)}</div>
+    </div>`).join('');
+}
+
+function renderSpark(state){
+  const values = state.history;
+  const n = values.length;
+  const w = 200, h = 38;
+  if (n < 2){
+    state.e.sparkLine.setAttribute('points', '');
+    state.e.sparkArea.setAttribute('points', '');
+    return;
+  }
+  const pts = values.map((v, i) => {
+    const x = (i/(n-1)) * w;
+    const y = h - (Math.max(0, Math.min(100, v))/100) * h;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  state.e.sparkLine.setAttribute('points', pts.join(' '));
+  state.e.sparkArea.setAttribute('points', `0,${h} ${pts.join(' ')} ${w},${h}`);
+}
+
+function applyStats(name, payload){
+  const state = panels.get(name);
+  if (!state) return;
+  setConnectedState(name, payload.connected, payload.error);
+  if (!payload.connected || !payload.stats) return;
+  const s = payload.stats;
+
+  setRing(state.e.cpuRing, state.e.cpuRingText, s.cpu_pct);
+  const memPct = s.mem_total ? (s.mem_used / s.mem_total * 100) : 0;
+  setRing(state.e.memRing, state.e.memRingText, memPct);
+  state.e.coresNote.textContent = s.cores;
+  state.e.memText.textContent = `${fmtMB(s.mem_used)} / ${fmtMB(s.mem_total)}`;
+
+  renderCores(state, s.per_core || []);
+  renderGpus(state, s.gpus || []);
+
+  state.history.push(s.cpu_pct);
+  if (state.history.length > HISTORY_LEN) state.history.shift();
+  renderSpark(state);
+
+  state.lastUsers = Object.entries(s.users).map(([user, u]) => ({ user, ...u }));
+  renderUsers(name);
+}
+
+async function addServerSubmit(ev){
+  ev.preventDefault();
+  const fd = new FormData(addForm);
+  const res = await fetch('/api/servers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: fd.get('name'), host: fd.get('host'),
+      port: parseInt(fd.get('port') || '22', 10), username: fd.get('username'),
+    }),
+  });
+  const data = await res.json();
+  if (data.ok === false) { alert(data.error || 'Could not add server'); return; }
+  addForm.reset();
+  addForm.port.value = '22';
+  await loadServers();
+}
+addForm.addEventListener('submit', addServerSubmit);
+
+async function removeServer(name){
+  await fetch(`/api/servers/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  await loadServers();
+}
+
+async function connectServer(name, password, otp){
+  const state = panels.get(name);
+  state.e.error.textContent = 'Connecting…';
+  const res = await fetch(`/api/servers/${encodeURIComponent(name)}/connect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, otp }),
+  });
+  const data = await res.json();
+  setConnectedState(name, !!data.ok, data.error);
+}
+
+async function disconnectServer(name){
+  await fetch(`/api/servers/${encodeURIComponent(name)}/disconnect`, { method: 'POST' });
+  setConnectedState(name, false, null);
+}
+
+function connectWS(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage = (ev) => {
+    const payload = JSON.parse(ev.data);
+    for (const [name, data] of Object.entries(payload)) applyStats(name, data);
+  };
+  ws.onclose = () => setTimeout(connectWS, 2000);
+}
+
+loadServers().then(connectWS);
+setInterval(loadServers, 10000);
+</script>
+</body>
+</html>
